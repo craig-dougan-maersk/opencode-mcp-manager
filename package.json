@@ -4,7 +4,15 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./tui": "./src/tui.tsx"
+    "./tui": "./dist/tui.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "compile": "node scripts/build.mjs",
+    "build:check": "node scripts/build.mjs --check",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@javilazaro/mcp-savings-core": "^0.7.2",
@@ -14,5 +22,12 @@
     "@opentui/core": ">=0.6.6",
     "@opentui/solid": ">=0.6.6",
     "solid-js": ">=1.9.0"
+  },
+  "devDependencies": {
+    "@babel/core": "7.29.7",
+    "@babel/preset-typescript": "7.29.7",
+    "@types/node": "26.6.5",
+    "babel-preset-solid": "1.9.12",
+    "typescript": "5.9.3"
   }
 }
