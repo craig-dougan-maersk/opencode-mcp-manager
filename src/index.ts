@@ -1,9 +1,8 @@
 import { Plugin } from "@opencode/plugin"
 import {
   measureServers,
-  toServerSpec,
+  readOpencodeMcpSpecs,
   saveSnapshot,
-  snapshotPath,
   EMPTY_TOKEN_USAGE,
   DEFAULT_MODEL,
 } from "@javilazaro/mcp-savings-core"
@@ -13,14 +12,13 @@ export default Plugin.define({
   async setup(ctx) {
     const run = async () => {
       try {
-        const fsMod: any = await import("node:fs")
-        const home = process.env.HOME || "/home/craig"
-        const cfg = JSON.parse(fsMod.readFileSync(`${home}/.config/opencode/opencode.json`, "utf8"))
-        const servers = cfg?.mcp?.servers || {}
-        const specs = Object.entries(servers).map(([name, entry]: any) =>
-          toServerSpec(name, entry, entry?.disabled !== true)
-        ).filter(Boolean)
-        const measurements = await measureServers(specs as any, DEFAULT_MODEL, 4)
+        // OpenCode stores MCP servers under a flat `mcp` map keyed by server
+        // name (~/.config/opencode/opencode.json). readOpencodeMcpSpecs reads
+        // exactly that shape and honours `enabled: false`. Disabled servers are
+        // deliberately included so the realized savings can be measured; see
+        // the measureServers doc for the spawn-side-effect tradeoff.
+        const specs = readOpencodeMcpSpecs()
+        const measurements = await measureServers(specs, DEFAULT_MODEL, 4)
         const serverWeights = measurements.map((m) => ({
           server: m.server,
           tools: m.tools.map((t) => ({ id: t.name, bytes: t.bytes })),
@@ -36,7 +34,7 @@ export default Plugin.define({
           mcpMeasurement: measurements,
           model: DEFAULT_MODEL,
         }
-        saveSnapshot(snapshot as any)
+        saveSnapshot(snapshot)
       } catch (e) {
         console.error("mcp-savings metering failed", e)
       }
