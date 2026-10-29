@@ -237,15 +237,82 @@ async function openManager(context: any) {
   await run()
 }
 
+const SNAPSHOT_PATH = () => {
+  const home = (globalThis as any)?.process?.env?.HOME || "/home/craig"
+  return `${home}/.config/mcp-savings/snapshot.json`
+}
+
+function McpCost(props: { refresh: () => number }) {
+  const context = usePlugin()
+  const [open, setOpen] = createSignal(false)
+  const [snapshot] = createResource(props.refresh, async () => {
+    try {
+      const fsMod: any = await import("node:fs")
+      return JSON.parse(fsMod.readFileSync(SNAPSHOT_PATH(), "utf8"))
+    } catch {
+      return null
+    }
+  })
+  // `mcpMeasurement` is the live per-server schema measurement written by the
+  // server-side half of this plugin; fall back to the older serverWeights shape.
+  const servers = () =>
+    snapshot()?.mcpMeasurement ?? snapshot()?.serverWeights ?? []
+
+  return (
+    <box flexDirection="column" marginTop={1}>
+      <box
+        onMouseDown={(e: any) => {
+          try {
+            e?.stopPropagation?.()
+          } catch {}
+          setOpen(!open())
+        }}
+      >
+        <text fg={context.theme.text.base} attributes={TextAttributes.BOLD}>
+          {(open() ? "▼ " : "▶ ") + "MCP cost/request"}
+        </text>
+      </box>
+      <Show when={open()}>
+        <box flexDirection="column" paddingLeft={1}>
+          <Show
+            when={snapshot()}
+            fallback={<text fg={context.theme.text.muted}>No snapshot</text>}
+          >
+            <text fg={context.theme.text.muted}>
+              {`Updated: ${new Date(snapshot().timestamp).toLocaleString()}`}
+            </text>
+            <For each={servers()}>
+              {(m: any) => (
+                <text
+                  fg={context.theme.text.base}
+                >{`${m.server}: ${m.tokens != null ? m.tokens + " tok" : "n/a"}  (${m.bytes} B)`}</text>
+              )}
+            </For>
+            <text
+              fg={context.theme.text.muted}
+            >{`Total: ${snapshot()?.totalSchemaBytes ?? 0} B`}</text>
+          </Show>
+        </box>
+      </Show>
+    </box>
+  )
+}
+
 export default Plugin.define({
   id: "mcp.manager",
   setup(context: any) {
     const location = asLocation(context)
     const [mcpOpen, setMcpOpen] = createSignal(false)
     const [tick, setTick] = createSignal(0)
+    const [costTick, setCostTick] = createSignal(0)
     const [servers] = createResource(tick, async () => {
       try { await context.data.location.mcp.server.sync(location) } catch {}
       return context.data.location.mcp.server.list(location) ?? []
+    })
+
+    const disposeSlot = context.ui.slot({
+      append: "sidebar.content",
+      render: () => <McpCost refresh={costTick} />,
     })
 
     context.keymap.layer(() => ({
@@ -261,10 +328,21 @@ export default Plugin.define({
             await openManager(context)
           },
         },
+        {
+          id: "mcp.manager.cost.refresh",
+          title: "Refresh MCP cost snapshot",
+          group: "MCP",
+          palette: true,
+          run: () => setCostTick((n: number) => n + 1),
+        },
       ],
       bindings: ["mcp.manager.open"],
     }))
     context.ui.toast.show({ message: "MCP Manager loaded", variant: "success", duration: 2000 })
-    return () => {}
+    return () => {
+      try {
+        disposeSlot?.()
+      } catch {}
+    }
   },
 })
